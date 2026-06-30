@@ -1,0 +1,100 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# PostgreSQL — StatefulSet + PersistentVolumeClaim
+# DevOps Learning: Databases use StatefulSets, not Deployments, because they
+# need a STABLE identity and STABLE storage. A Deployment's pods are disposable
+# and interchangeable — a database pod is not. This is one of the most
+# commonly-tested Kubernetes concepts in interviews.
+#
+# NOTE: The "postgres-init-schema" ConfigMap is intentionally NOT defined here.
+# It is generated from the real db/schema.sql and applied by
+# scripts/deploy-local.sh BEFORE this file — see that script for why this
+# ordering matters (Postgres only loads init scripts on first boot of an
+# empty data dir, so the real ConfigMap must exist before the StatefulSet
+# pod is created, not after).
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── PersistentVolumeClaim — requests durable storage for Postgres data ────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: shaja
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi      # plenty for Phase 1 — increase later if needed
+---
+# ── StatefulSet — runs exactly 1 Postgres pod with a stable name and storage ──
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: shaja
+spec:
+  serviceName: postgres-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef: { name: shaja-config, key: DB_NAME }
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef: { name: shaja-config, key: DB_USER }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: shaja-secrets, key: DB_PASSWORD }
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+              subPath: pgdata   # avoids "lost+found" directory conflict in some volume types
+            - name: init-schema
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "shaja_admin", "-d", "shaja_db"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "shaja_admin", "-d", "shaja_db"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+        - name: init-schema
+          configMap:
+            name: postgres-init-schema
+---
+# ── Service — stable DNS name "postgres-service" other pods connect to ────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: shaja
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+  clusterIP: None   # headless service — correct pattern for StatefulSets

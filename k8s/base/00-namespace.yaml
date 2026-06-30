@@ -1,0 +1,11 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Namespace — isolates all SHAJA resources from other things in the cluster
+# DevOps Learning: Namespaces are how you logically separate workloads in
+# one cluster. Everything below lives in "shaja" — never the "default" namespace.
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shaja
+  labels:
+    app.kubernetes.io/part-of: shaja-al-zahabi

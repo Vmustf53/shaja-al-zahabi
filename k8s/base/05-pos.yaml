@@ -1,0 +1,67 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# pos-service — Deployment + Service
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pos-deployment
+  namespace: shaja
+  labels:
+    app: pos-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pos-service
+  template:
+    metadata:
+      labels:
+        app: pos-service
+    spec:
+      containers:
+        - name: pos-service
+          image: shaja-al-zahabi-pos-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3002
+          env:
+            - name: PORT
+              value: "3002"
+            - name: DB_HOST
+              valueFrom: { configMapKeyRef: { name: shaja-config, key: DB_HOST } }
+            - name: DB_PORT
+              valueFrom: { configMapKeyRef: { name: shaja-config, key: DB_PORT } }
+            - name: DB_NAME
+              valueFrom: { configMapKeyRef: { name: shaja-config, key: DB_NAME } }
+            - name: DB_USER
+              valueFrom: { configMapKeyRef: { name: shaja-config, key: DB_USER } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: shaja-secrets, key: DB_PASSWORD } }
+            - name: INVENTORY_SERVICE_URL
+              valueFrom: { configMapKeyRef: { name: shaja-config, key: INVENTORY_SERVICE_URL } }
+            - name: CRM_SERVICE_URL
+              valueFrom: { configMapKeyRef: { name: shaja-config, key: CRM_SERVICE_URL } }
+          readinessProbe:
+            httpGet: { path: /health, port: 3002 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: 3002 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits:   { cpu: "250m", memory: "256Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pos-service
+  namespace: shaja
+spec:
+  selector:
+    app: pos-service
+  ports:
+    - port: 3002
+      targetPort: 3002
+  type: ClusterIP

@@ -1,0 +1,123 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# SHAJA-AL-ZAHABI — Local Development Stack
+# Run: docker compose up --build
+# This is your first complete, runnable demo — all 3 services + PostgreSQL,
+# wired together exactly as they'll run in Kubernetes later.
+# ══════════════════════════════════════════════════════════════════════════════
+
+services:
+
+  # ── PostgreSQL — shared database for all services ──────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: shaja-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: shaja_db
+      POSTGRES_USER: shaja_admin
+      POSTGRES_PASSWORD: shaja_dev_password_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shaja_admin -d shaja_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - shaja-network
+
+  # ── Inventory Service — :3001 ────────────────────────────────────────────────
+  inventory-service:
+    build:
+      context: ./services/inventory
+      dockerfile: Dockerfile
+    container_name: shaja-inventory
+    restart: unless-stopped
+    environment:
+      PORT: 3001
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: shaja_db
+      DB_USER: shaja_admin
+      DB_PASSWORD: shaja_dev_password_2026
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - shaja-network
+
+  # ── POS Service — :3002 ──────────────────────────────────────────────────────
+  pos-service:
+    build:
+      context: ./services/pos
+      dockerfile: Dockerfile
+    container_name: shaja-pos
+    restart: unless-stopped
+    environment:
+      PORT: 3002
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: shaja_db
+      DB_USER: shaja_admin
+      DB_PASSWORD: shaja_dev_password_2026
+      INVENTORY_SERVICE_URL: http://inventory-service:3001
+      CRM_SERVICE_URL: http://crm-service:3003
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      inventory-service:
+        condition: service_started
+    networks:
+      - shaja-network
+
+  # ── CRM Service — :3003 ──────────────────────────────────────────────────────
+  crm-service:
+    build:
+      context: ./services/crm
+      dockerfile: Dockerfile
+    container_name: shaja-crm
+    restart: unless-stopped
+    environment:
+      PORT: 3003
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: shaja_db
+      DB_USER: shaja_admin
+      DB_PASSWORD: shaja_dev_password_2026
+    ports:
+      - "3003:3003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - shaja-network
+
+  # ── Nginx — API gateway, single entry point on :8090 ────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: shaja-nginx
+    restart: unless-stopped
+    ports:
+      - "8090:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - inventory-service
+      - pos-service
+      - crm-service
+    networks:
+      - shaja-network
+
+networks:
+  shaja-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

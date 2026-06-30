@@ -1,0 +1,18 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# ConfigMap — non-sensitive configuration shared across services
+# DevOps Learning: ConfigMaps hold settings that change between environments
+# (dev/prod) but are NOT secret. Passwords go in a Secret instead (see 02-secret.yaml)
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shaja-config
+  namespace: shaja
+data:
+  DB_HOST: "postgres-service"
+  DB_PORT: "5432"
+  DB_NAME: "shaja_db"
+  DB_USER: "shaja_admin"
+  INVENTORY_SERVICE_URL: "http://inventory-service:3001"
+  POS_SERVICE_URL: "http://pos-service:3002"
+  CRM_SERVICE_URL: "http://crm-service:3003"

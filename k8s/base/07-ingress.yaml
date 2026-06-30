@@ -1,0 +1,47 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Ingress — single external entry point, routes by path to each service
+# DevOps Learning: Ingress is the Kubernetes-native equivalent of the Nginx
+# gateway we used in Docker Compose. Instead of one Nginx container we manage
+# ourselves, Kubernetes runs an Ingress Controller (Nginx-based) that reads
+# THIS file and configures routing automatically. Same concept, managed by K8s.
+#
+# Requires the Nginx Ingress Controller to be installed in the cluster first:
+#   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+#   helm install ingress-nginx ingress-nginx/ingress-nginx \
+#     --namespace ingress-nginx --create-namespace
+# (k3d ships its own Traefik-based ingress by default — we override it with
+#  Nginx Ingress for transferability to other Kubernetes clusters/clouds)
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shaja-ingress
+  namespace: shaja
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /api/inventory(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: inventory-service
+                port:
+                  number: 3001
+          - path: /api/pos(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: pos-service
+                port:
+                  number: 3002
+          - path: /api/crm(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: crm-service
+                port:
+                  number: 3003
